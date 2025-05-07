@@ -1,0 +1,60 @@
+import pandas as pd
+df_person = pd.read_csv('/Users/zjh/Downloads/datasets/person.csv')
+df_vehicle = pd.read_csv('/Users/zjh/Downloads/datasets/vehicle.csv')
+df_accident = pd.read_csv('/Users/zjh/Downloads/datasets/accident.csv')
+
+df_accident['ACCIDENT_DATE'] = pd.to_datetime(df_accident['ACCIDENT_DATE'], errors='coerce')
+df_accident['ACCIDENT_YEAR'] = df_accident['ACCIDENT_DATE'].dt.year
+
+df_v = pd.merge(
+    df_vehicle[['ACCIDENT_NO','VEHICLE_ID','VEHICLE_YEAR_MANUF']],
+    df_accident[['ACCIDENT_NO','ACCIDENT_YEAR']],
+    on='ACCIDENT_NO', how='left'
+)
+df_v['VEHICLE_AGE'] = df_v['ACCIDENT_YEAR'] - df_v['VEHICLE_YEAR_MANUF']
+
+df_p = df_person[[
+    'ACCIDENT_NO',
+    'PERSON_ID',
+    'VEHICLE_ID',
+    'AGE_GROUP',
+    'INJ_LEVEL'    
+]]
+
+df = pd.merge(    #合并表
+    df_p,
+    df_v[['ACCIDENT_NO','VEHICLE_ID','VEHICLE_AGE']],
+    on=['ACCIDENT_NO','VEHICLE_ID'],
+    how='left'
+)
+df = df.dropna(subset=['VEHICLE_AGE'])
+df = df.dropna(subset=['AGE_GROUP'])
+
+def age_regroup(age):  #重排年龄组
+    if age in ["0-4", "5-12", "13-15"]:
+        return "Under 16"
+    elif age in ["16-17", "18-21", "22-25"]:
+        return "17-25"
+    elif age in ["26-29", "30-39"]:
+        return "26-39"
+    elif age in ["40-49", "50-59", "60-64"]:
+        return "40-64"
+    elif age in ["65-69", "70+"]:
+        return "65+"
+    else:
+        return "Unknown"
+   
+
+df.loc[:, 'AGE_GROUP'] = df['AGE_GROUP'].apply(age_regroup)
+
+#IQR法处理离群值
+Q1 = df['VEHICLE_AGE'].quantile(0.25)
+Q3 = df['VEHICLE_AGE'].quantile(0.75)
+IQR = Q3 - Q1
+
+lower = Q1 - 1.5 * IQR
+upper = Q3 + 1.5 * IQR
+
+df = df[(df['VEHICLE_AGE'] >= lower) & (df['VEHICLE_AGE'] <= upper)].copy()
+
+df
